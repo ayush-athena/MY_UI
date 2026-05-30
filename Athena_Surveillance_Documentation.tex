@@ -1,0 +1,123 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{tabularx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{xcolor}
+
+\title{Athena Surveillance System \\ \large Comprehensive Technical Documentation}
+\author{System Architecture \& Technical Guide}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+The \textbf{Athena Surveillance System} is a high-performance, real-time command-and-control platform designed for multi-camera Pan-Tilt-Zoom (PTZ) deployments. It integrates deep learning-based object tracking, cross-camera person re-identification (ReID), and automated PTZ stabilization to provide persistent autonomous tracking. The system utilizes a modern web-based frontend and an asynchronous Python/Flask backend capable of handling multiple RTSP streams with low-latency GPU processing.
+
+\section{System Architecture overview}
+The system follows a decoupled architecture separating the machine learning and hardware integration layer (Backend) from the user interface (Frontend).
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{l|X}
+        \toprule
+        \textbf{Component} & \textbf{Technology Stack \& Tools} \\
+        \midrule
+        \textbf{Backend Framework} & Python, Flask, Threading, Queue \\
+        \textbf{Deep Learning Core} & PyTorch, ultralytics (YOLO11s), torchvision (MobileNetV3) \\
+        \textbf{Computer Vision} & OpenCV (\texttt{cv2}), NumPy, SciPy \\
+        \textbf{Camera Integration} & RTSP, Dahua/Hikvision RPC2 Protocol, Requests \\
+        \textbf{Frontend Framework} & React, Vite, Context API \\
+        \textbf{Frontend Styling} & Tailwind CSS, Vanilla CSS \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Technology Stack Overview}
+\end{table}
+
+\section{Core Features and Logic}
+
+\subsection{1. Multi-Camera Stream Pipeline}
+\textbf{Functioning Logic:} Each connected IP camera initializes a dedicated \texttt{CameraStream} class. To ensure non-blocking operations, the stream creates three concurrent daemon threads:
+\begin{itemize}
+    \item \textbf{Capture Worker:} Pulls RTSP frames using OpenCV. Ensures stream reliability by auto-reconnecting if frames are dropped. Downscales high-resolution frames (e.g., to 1920px width) for processing stability.
+    \item \textbf{Tracking Worker:} Dispatches frames to the YOLO object detection model and manages tracking logic and ReID extraction.
+    \item \textbf{PTZ Worker:} Consumes a serialized command queue to send movement instructions to the camera over the network.
+\end{itemize}
+
+\subsection{2. Intelligent Subject Tracking (YOLO \& ReID)}
+\textbf{Functioning Logic:} The system utilizes YOLO11s with ByteTrack for high-confidence (0.70 threshold) person detection and spatial tracking. When a target is selected, a cropped image of the person is passed to the Re-Identification Engine. 
+\begin{itemize}
+    \item \textbf{Methods Used:} Bounding box extraction, Image Resizing (256x128), and Tensor Normalization.
+    \item \textbf{Re-Identification Engine:} Uses a pre-trained MobileNetV3-Small model stripped of its classifier to generate facial/body embeddings. It utilizes a temporal-window batch accumulator (e.g., 15ms window) to collect crops from all active cameras, flushing them to the GPU as a single tensor to dramatically reduce CUDA pipeline overhead.
+\end{itemize}
+
+\subsection{3. Cross-Camera Global Handshake}
+\textbf{Functioning Logic:} The system allows tracking a single individual across the entire camera network.
+\begin{itemize}
+    \item \textbf{Mechanism:} When a user clicks a subject ("Manual" or "Global" mode), the primary camera extracts the target's embedding and saves it to the \texttt{GlobalState} singleton.
+    \item \textbf{Parallel Tracking:} Other camera threads constantly compare their local YOLO detections against the global embedding using \textbf{Cosine Similarity}. If the similarity score exceeds the threshold (0.65), the camera locks onto the target automatically.
+\end{itemize}
+
+\subsection{4. PTZ Dead-Reckoning and Stabilization}
+\textbf{Functioning Logic:} To keep a moving target centered without rapid oscillating movements, the system employs a Discrete PID Controller and dead-reckoning.
+\begin{itemize}
+    \item \textbf{PID Controller:} Calculates movement speed and direction based on the target's distance from the center of the frame. 
+    \item \textbf{Anti-Windup \& Braking:} Integrates past errors to overcome initial friction and uses a derivative term to apply braking force, killing camera oscillation when a subject moves rapidly.
+    \item \textbf{Dead-Reckoning:} Continuously updates a virtual Pan/Tilt coordinate based on the velocity and time elapsed, allowing the system to approximate the camera's position without polling the hardware.
+\end{itemize}
+
+\subsection{5. RPC Session Management}
+\textbf{Functioning Logic:} Communicating with Dahua/Hikvision cameras requires an MD5 challenge-response authentication.
+\begin{itemize}
+    \item \textbf{Mechanism:} The \texttt{RPCSessionPool} authenticates with the cameras and caches the session tokens. A background heartbeat thread pings the cameras every 30 seconds to keep the sessions alive.
+    \item \textbf{Advantage:} This entirely removes the 2-3 second session-negotiation latency from the PTZ tracking hot-path, enabling instant, real-time camera movement.
+\end{itemize}
+
+\section{Feature Details and Tool Mapping}
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{l|l|X}
+        \toprule
+        \textbf{Feature} & \textbf{Key Tools / Libraries} & \textbf{Description} \\
+        \midrule
+        \textbf{Target Detection} & \texttt{ultralytics (YOLO)} & Identifies persons in the frame via YOLO11s using ByteTrack tracking. \\
+        \midrule
+        \textbf{Feature Extraction} & \texttt{torchvision (MobileNetV3)} & Extracts vector embeddings of detected persons for identification. \\
+        \midrule
+        \textbf{Cosine Similarity} & \texttt{scipy.spatial.distance} & Compares embeddings mathematically to verify target identity across cameras. \\
+        \midrule
+        \textbf{PTZ Control} & \texttt{requests}, \texttt{RPCSessionPool} & Sends HTTP POST requests executing RPC2 commands for camera movement. \\
+        \midrule
+        \textbf{Stream Capture} & \texttt{cv2.VideoCapture} (OpenCV) & Connects to camera RTSP feeds via TCP transport to retrieve video frames. \\
+        \midrule
+        \textbf{Event Streaming} & \texttt{Flask Response}, SSE & Pushes live telemetry and health data to the frontend React app. \\
+        \midrule
+        \textbf{UI Dashboard} & \texttt{React}, \texttt{Vite} & Component-based user interface displaying camera grids and active statuses. \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Detailed Feature mapping to Underlying Tools}
+\end{table}
+
+\section{Frontend Architecture}
+The frontend is built with \textbf{React.js} and utilizes a context-based state management system (\texttt{AthenaContext}) to distribute real-time telemetry globally.
+\begin{itemize}
+    \item \textbf{Dashboard Component:} Displays a grid of connected cameras, their connection quality, FPS, blur score, and active tracking status.
+    \item \textbf{VideoView Component:} An immersive single-camera view that overlays an interactive PTZ crosshair, allowing manual camera operation via mouse clicks.
+    \item \textbf{Real-Time Sync:} Connects to the backend's Server-Sent Events (SSE) endpoint (\texttt{/api/events}) to refresh the UI at 0.5s intervals without expensive AJAX polling.
+\end{itemize}
+
+\section{Conclusion}
+The Athena Surveillance System is a heavily optimized, multi-threaded architecture that seamlessly bridges modern web technologies with GPU-accelerated deep learning. By employing techniques like batched tensor inference, PID-controlled PTZ stabilization, and persistent RPC session pooling, the platform ensures highly responsive and reliable autonomous tracking.
+
+\end{document}

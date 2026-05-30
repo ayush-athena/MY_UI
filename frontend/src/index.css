@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-db-bg:          #0a0d14;
+  --color-db-panel:       #131826;
+  --color-db-border:      #1f2937;
+  --color-db-active:      #10b981;
+  --color-db-inactive:    #ef4444;
+  --color-db-maintenance: #f59e0b;
+  --font-family-sans:     'Inter', sans-serif;
+  --font-family-mono:     ui-monospace, SFMono-Regular, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #0a0d14;
+  color: #e5e7eb;
+  margin: 0;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #374151; }
+
+/* ── Layout helpers ─────────────────────────────────── */
+.h-screen  { height: 100vh; }
+.flex      { display: flex; }
+.flex-col  { flex-direction: column; }
+.flex-1    { flex: 1 1 0%; }
+.shrink-0  { flex-shrink: 0; }
+.overflow-hidden { overflow: hidden; }
+.relative  { position: relative; }
+.absolute  { position: absolute; }
+.inset-0   { inset: 0; }
+.z-10      { z-index: 10; }
+.z-20      { z-index: 20; }
+.z-30      { z-index: 30; }
+
+/* ── Glass panel ────────────────────────────────────── */
+.glass-panel {
+  background: #131826;
+  border: 1px solid #1f2937;
+  border-radius: 0.5rem;
+}
+
+/* ── Metric ring ────────────────────────────────────── */
+.metric-ring {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border-width: 3px;
+  border-style: solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── PTZ buttons ────────────────────────────────────── */
+.ptz-btn {
+  background: #1f2937;
+  border: 1px solid #374151;
+  color: #9ca3af;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.1s;
+  user-select: none;
+}
+.ptz-btn:hover  { background: #374151; color: #fff; }
+.ptz-btn:active { transform: scale(0.93); }
+
+/* ── Sidebar nav item ───────────────────────────────── */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  color: #9ca3af;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-item:hover { background: rgba(255,255,255,0.05); color: #e5e7eb; }
+.nav-item.active {
+  background: #1e1b4b;
+  color: #818cf8;
+  border-left: 3px solid #6366f1;
+  padding-left: 13px;
+}

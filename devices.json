@@ -1,0 +1,30 @@
+[
+    {
+        "id": "AYUSH",
+        "type": "PTZ Camera",
+        "status": "Active",
+        "ip": "192.168.6.199",
+        "username": "admin",
+        "password": "Rishi@2004",
+        "rtsp_port": 554,
+        "http_port": 80,
+        "channel": 1,
+        "subtype": 1,
+        "location": "Unknown Sector",
+        "camera_type": "PTZ"
+    },
+    {
+        "id": "CAM2",
+        "type": "PTZ Camera",
+        "status": "Active",
+        "ip": "192.168.6.254",
+        "username": "admin",
+        "password": "@yush2004T",
+        "rtsp_port": 554,
+        "http_port": 80,
+        "channel": 1,
+        "subtype": 1,
+        "location": "Unknown Sector",
+        "camera_type": "PTZ"
+    }
+]

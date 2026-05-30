@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROJECT X - COMMAND & CONTROL</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dashboard: {
+                            bg: '#0a0d14',
+                            panel: '#131826',
+                            border: '#1f2937',
+                            primary: '#3b82f6',
+                            active: '#10b981',
+                            inactive: '#ef4444',
+                            maintenance: '#f59e0b',
+                            textMain: '#e5e7eb',
+                            textMuted: '#9ca3af'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['ui-monospace', 'SFMono-Regular']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #0a0d14; color: #e5e7eb; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #374151; }
+        
+        .glass-panel {
+            background: #131826;
+            border: 1px solid #1f2937;
+            border-radius: 0.5rem;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            color: #9ca3af;
+            border-radius: 8px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .nav-item:hover { background: rgba(255,255,255,0.05); color: #e5e7eb; }
+        .nav-item.active { background: #1e1b4b; color: #818cf8; border-left: 3px solid #6366f1; }
+
+        .metric-ring {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .ptz-btn-mini {
+            background: #1f2937;
+            border: 1px solid #374151;
+            color: #9ca3af;
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.1s;
+        }
+        .ptz-btn-mini:hover { background: #374151; color: white; }
+        .ptz-btn-mini:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden">
+
+    <!-- Left Sidebar -->
+    <aside class="w-64 glass-panel border-y-0 border-l-0 rounded-none flex flex-col shrink-0 relative z-20">
+        <div class="p-6 flex items-center gap-3">
+            <div class="w-8 h-8 flex items-center justify-center bg-gray-800 rounded">
+                <i data-lucide="shield" class="w-5 h-5 text-gray-200"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-bold tracking-widest text-white leading-tight">PROJECT X</h1>
+                <p class="text-[9px] text-gray-400 tracking-wider">COMMAND & CONTROL</p>
+            </div>
+        </div>
+
+        <nav class="flex-1 px-4 py-2 space-y-1">
+            <div class="nav-item active"><i data-lucide="video" class="w-4 h-4"></i> <span class="text-sm font-semibold">Cam</span></div>
+        </nav>
+
+        <div class="p-4 border-t border-dashboard-border flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center">
+                <i data-lucide="user" class="w-4 h-4 text-gray-300"></i>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-white">Operator 1</div>
+                <div class="text-[10px] text-gray-400">Administrator</div>
+            </div>
+            <i data-lucide="chevrons-up-down" class="w-3 h-3 text-gray-500 ml-auto"></i>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 flex flex-col relative h-full overflow-hidden">
+        
+        <!-- DASHBOARD VIEW -->
+        <div id="dashboard-view" class="absolute inset-0 overflow-y-auto p-6 flex flex-col gap-6 z-10 bg-dashboard-bg">
+            
+            <!-- Header -->
+            <div class="flex justify-between items-center shrink-0">
+                <h2 class="text-xl font-semibold text-white">Cam</h2>
+                <div class="flex items-center gap-4">
+                    <button class="relative text-gray-400 hover:text-white transition">
+                        <i data-lucide="bell" class="w-5 h-5"></i>
+                        <span class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border border-dashboard-bg flex items-center justify-center text-[8px] text-white font-bold" id="notif-badge">3</span>
+                    </button>
+                    <button class="text-gray-400 hover:text-white transition" onclick="openCamSettingsModal()">
+                        <i data-lucide="settings" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex gap-8 border-b border-dashboard-border shrink-0">
+                <button class="px-1 py-3 text-sm font-semibold text-indigo-400 border-b-2 border-indigo-500">All Camera</button>
+                <button class="px-1 py-3 text-sm text-gray-400 hover:text-gray-200">Camera Management</button>
+                <button class="px-1 py-3 text-sm text-gray-400 hover:text-gray-200">Report</button>
+            </div>
+
+            <!-- Metrics -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0" id="metrics-container">
+                <div class="glass-panel p-4 flex items-center gap-4">
+                    <div class="w-12 h-12 rounded bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400"><i data-lucide="monitor" class="w-6 h-6"></i></div>
+                    <div>
+                        <div class="text-[10px] text-gray-400 font-semibold uppercase">Total Cameras</div>
+                        <div class="text-2xl font-bold text-white" id="metric-total">0</div>
+                        <div class="text-[10px] text-gray-500">All Registered</div>
+                    </div>
+                </div>
+                <div class="glass-panel p-4 flex items-center justify-between">
+                    <div class="flex gap-4 items-center">
+                        <div class="w-12 h-12 rounded bg-green-500/10 border border-green-500/20 flex items-center justify-center text-green-500"><i data-lucide="video" class="w-6 h-6"></i></div>
+                        <div>
+                            <div class="text-[10px] text-gray-400 font-semibold uppercase">Active Cameras</div>
+                            <div class="text-2xl font-bold text-white" id="metric-active">0</div>
+                            <div class="text-[10px] text-gray-500"><span id="metric-active-pct">0</span>% of total</div>
+                        </div>
+                    </div>
+                    <div class="metric-ring border-[3px] border-green-500/30 border-t-green-500 text-green-400" style="transform: rotate(45deg);"><span style="transform: rotate(-45deg);" id="metric-active-ring">0%</span></div>
+                </div>
+                <div class="glass-panel p-4 flex items-center justify-between">
+                    <div class="flex gap-4 items-center">
+                        <div class="w-12 h-12 rounded bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500"><i data-lucide="video-off" class="w-6 h-6"></i></div>
+                        <div>
+                            <div class="text-[10px] text-gray-400 font-semibold uppercase">Inactive Cameras</div>
+                            <div class="text-2xl font-bold text-white" id="metric-inactive">0</div>
+                            <div class="text-[10px] text-gray-500"><span id="metric-inactive-pct">0</span>% of total</div>
+                        </div>
+                    </div>
+                    <div class="metric-ring border-[3px] border-red-500/30 border-t-red-500 text-red-400" style="transform: rotate(135deg);"><span style="transform: rotate(-135deg);" id="metric-inactive-ring">0%</span></div>
+                </div>
+                <div class="glass-panel p-4 flex items-center justify-between">
+                    <div class="flex gap-4 items-center">
+                        <div class="w-12 h-12 rounded bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500"><i data-lucide="wrench" class="w-6 h-6"></i></div>
+                        <div>
+                            <div class="text-[10px] text-gray-400 font-semibold uppercase">Maintenance</div>
+                            <div class="text-2xl font-bold text-white" id="metric-maint">0</div>
+                            <div class="text-[10px] text-gray-500"><span id="metric-maint-pct">0</span>% of total</div>
+                        </div>
+                    </div>
+                    <div class="metric-ring border-[3px] border-yellow-500/30 border-t-yellow-500 text-yellow-400" style="transform: rotate(225deg);"><span style="transform: rotate(-225deg);" id="metric-maint-ring">0%</span></div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="flex items-center justify-between gap-4 shrink-0 flex-wrap">
+                <div class="relative flex-1 max-w-sm">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+                    <input type="text" placeholder="Search camera name, location, IP..." class="w-full bg-dashboard-panel border border-dashboard-border rounded-lg pl-9 pr-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-gray-500">
+                </div>
+                <div class="flex items-center gap-3">
+                    <select class="bg-dashboard-panel border border-dashboard-border rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none w-32 appearance-none">
+                        <option>Status: All</option>
+                    </select>
+                    <select class="bg-dashboard-panel border border-dashboard-border rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none w-36 appearance-none">
+                        <option>Camera Type: All</option>
+                    </select>
+                    <select class="bg-dashboard-panel border border-dashboard-border rounded-lg px-3 py-2 text-xs text-gray-300 focus:outline-none w-32 appearance-none">
+                        <option>Location: All</option>
+                    </select>
+                    
+                    <div class="flex bg-dashboard-panel border border-dashboard-border rounded-lg p-1 ml-4">
+                        <button class="p-1.5 bg-gray-700/50 rounded text-white"><i data-lucide="layout-grid" class="w-4 h-4"></i></button>
+                        <button class="p-1.5 text-gray-500 hover:text-gray-300"><i data-lucide="list" class="w-4 h-4"></i></button>
+                    </div>
+                    <button class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-semibold ml-2 transition">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i> Export
+                    </button>
+                </div>
+            </div>
+
+            <!-- Camera Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 shrink-0" id="dashboard-camera-grid">
+                <!-- Populated by JS -->
+                <div class="col-span-full text-center text-sm text-gray-500 py-10">Loading cameras...</div>
+            </div>
+
+            <!-- Bottom Panels -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 shrink-0 pb-10">
+                <!-- Alerts -->
+                <div class="glass-panel p-4 flex flex-col h-64">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xs font-bold text-gray-200">Alerts</h3>
+                        <a href="#" class="text-[10px] text-indigo-400 hover:underline">View All</a>
+                    </div>
+                    <div class="flex-1 overflow-y-auto flex flex-col gap-2 pr-2" id="alerts-container">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Snapshots -->
+                <div class="glass-panel p-4 flex flex-col h-64 lg:col-span-1">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xs font-bold text-gray-200">Saved Snapshots / Recordings</h3>
+                        <a href="#" class="text-[10px] text-indigo-400 hover:underline">View All</a>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 overflow-y-auto flex-1 pr-2" id="snapshots-container">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Status Overview -->
+                <div class="glass-panel p-4 flex flex-col h-64">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xs font-bold text-gray-200">Camera Status Overview</h3>
+                        <a href="#" class="text-[10px] text-indigo-400 hover:underline">View All</a>
+                    </div>
+                    <div class="flex-1 flex items-center justify-between">
+                        <div class="w-32 h-32 relative">
+                            <canvas id="statusChart"></canvas>
+                            <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <div class="text-xl font-bold text-white" id="chart-total">0</div>
+                                <div class="text-[9px] text-gray-400 uppercase">Total</div>
+                            </div>
+                        </div>
+                        <div class="flex-1 flex flex-col gap-3 pl-6">
+                            <div class="flex justify-between items-center text-xs">
+                                <div class="flex items-center gap-2 text-gray-300"><div class="w-2 h-2 rounded-full bg-green-500"></div> Active</div>
+                                <div class="font-mono text-gray-400" id="leg-active">0 (0%)</div>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <div class="flex items-center gap-2 text-gray-300"><div class="w-2 h-2 rounded-full bg-red-500"></div> Inactive</div>
+                                <div class="font-mono text-gray-400" id="leg-inactive">0 (0%)</div>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <div class="flex items-center gap-2 text-gray-300"><div class="w-2 h-2 rounded-full bg-yellow-500"></div> Maintenance</div>
+                                <div class="font-mono text-gray-400" id="leg-maint">0 (0%)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center text-[10px] text-gray-600 mt-auto pt-4 pb-2">All times are in local time</div>
+        </div>
+
+
+        <!-- VIDEO VIEW (Minimalistic Central Display) -->
+        <div id="video-view" class="absolute inset-0 bg-[#06080d] z-30 hidden flex-col">
+            <!-- Header -->
+            <div class="h-12 border-b border-dashboard-border flex items-center justify-between px-4 bg-dashboard-bg shrink-0">
+                <div class="flex items-center gap-4">
+                    <button onclick="closeVideoView()" class="text-gray-400 hover:text-white flex items-center gap-1 text-xs">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to Dashboard
+                    </button>
+                    <div class="w-px h-4 bg-gray-700"></div>
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="video" class="w-4 h-4 text-gray-400"></i>
+                        <span class="text-sm font-bold text-white tracking-wide" id="active-video-title">CAM-00</span>
+                        <span class="px-2 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase bg-green-500/20 text-green-400 border border-green-500/30" id="active-video-status">ACTIVE</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="setTrackingMode('Global')" id="track-btn" class="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded text-xs text-gray-200 transition">
+                        <i data-lucide="mouse-pointer-click" class="w-3.5 h-3.5"></i> Target Lock
+                    </button>
+                    <button onclick="captureSnapshot()" class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded text-xs text-white transition">
+                        <i data-lucide="camera" class="w-3.5 h-3.5"></i> Snapshot
+                    </button>
+                </div>
+            </div>
+
+            <!-- Video Player Area -->
+            <div class="flex-1 relative flex items-center justify-center bg-black overflow-hidden group">
+                <img id="live-stream" src="" class="w-full h-full object-contain pointer-events-auto cursor-crosshair z-10" />
+                
+                <div id="no-signal" class="absolute inset-0 flex flex-col items-center justify-center text-red-500 z-0 bg-gray-900/90 hidden">
+                    <i data-lucide="wifi-off" class="w-16 h-16 mb-4 opacity-80"></i>
+                    <span class="font-mono text-lg tracking-widest uppercase font-bold">SIGNAL LOST</span>
+                </div>
+
+                <!-- Minimalistic Floating PTZ Controls -->
+                <div class="absolute bottom-6 right-6 bg-black/70 backdrop-blur-md border border-white/10 rounded-xl p-3 z-20 flex gap-4 shadow-2xl opacity-50 group-hover:opacity-100 transition-opacity">
+                    <!-- Directional -->
+                    <div class="grid grid-cols-3 gap-1">
+                        <div></div>
+                        <button onmousedown="sendPTZ('start', 'Up')" onmouseup="sendPTZ('stop', 'Up')" onmouseleave="sendPTZ('stop', 'Up')" class="ptz-btn-mini w-8 h-8"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
+                        <div></div>
+                        <button onmousedown="sendPTZ('start', 'Left')" onmouseup="sendPTZ('stop', 'Left')" onmouseleave="sendPTZ('stop', 'Left')" class="ptz-btn-mini w-8 h-8"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                        <button onclick="sendPTZ('start', 'GotoPreset', 1)" class="ptz-btn-mini w-8 h-8 bg-gray-800"><i data-lucide="crosshair" class="w-3.5 h-3.5 text-indigo-400"></i></button>
+                        <button onmousedown="sendPTZ('start', 'Right')" onmouseup="sendPTZ('stop', 'Right')" onmouseleave="sendPTZ('stop', 'Right')" class="ptz-btn-mini w-8 h-8"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                        <div></div>
+                        <button onmousedown="sendPTZ('start', 'Down')" onmouseup="sendPTZ('stop', 'Down')" onmouseleave="sendPTZ('stop', 'Down')" class="ptz-btn-mini w-8 h-8"><i data-lucide="chevron-down" class="w-4 h-4"></i></button>
+                        <div></div>
+                    </div>
+                    <div class="w-px bg-gray-700/50"></div>
+                    <!-- Zoom & Focus -->
+                    <div class="flex flex-col justify-center gap-2">
+                        <div class="flex gap-1">
+                            <button onmousedown="sendPTZ('start', 'ZoomWide')" onmouseup="sendPTZ('stop', 'ZoomWide')" onmouseleave="sendPTZ('stop', 'ZoomWide')" class="ptz-btn-mini px-2 py-1 text-[10px]"><i data-lucide="zoom-out" class="w-3 h-3 mr-1"></i> Wide</button>
+                            <button onmousedown="sendPTZ('start', 'ZoomTele')" onmouseup="sendPTZ('stop', 'ZoomTele')" onmouseleave="sendPTZ('stop', 'ZoomTele')" class="ptz-btn-mini px-2 py-1 text-[10px]"><i data-lucide="zoom-in" class="w-3 h-3 mr-1"></i> Tele</button>
+                        </div>
+                        <div class="flex gap-1">
+                            <button onmousedown="sendPTZ('start', 'FocusNear')" onmouseup="sendPTZ('stop', 'FocusNear')" onmouseleave="sendPTZ('stop', 'FocusNear')" class="ptz-btn-mini px-2 py-1 text-[10px]"><i data-lucide="focus" class="w-3 h-3 mr-1"></i> Near</button>
+                            <button onmousedown="sendPTZ('start', 'FocusFar')" onmouseup="sendPTZ('stop', 'FocusFar')" onmouseleave="sendPTZ('stop', 'FocusFar')" class="ptz-btn-mini px-2 py-1 text-[10px]"><i data-lucide="scan" class="w-3 h-3 mr-1"></i> Far</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simple overlay HUD -->
+                <div class="absolute top-4 left-4 z-20 flex flex-col gap-2 pointer-events-none">
+                    <div class="bg-black/60 backdrop-blur px-2 py-1 rounded text-[10px] font-mono text-white border border-white/10" id="hud-tracking-mode">
+                        TRACKING: <span class="text-gray-400">IDLE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Settings Modal (Kept minimalistic for space) -->
+    <div id="cam-settings-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="glass-panel w-full max-w-sm p-6 shadow-2xl relative">
+            <button onclick="closeCamSettingsModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-lg font-bold text-white mb-4">Add/Edit Device API Placeholder</h3>
+            <p class="text-sm text-gray-400">Settings logic remains unchanged. Refer to implementation plan for logic integration.</p>
+            <button onclick="closeCamSettingsModal()" class="mt-4 px-4 py-2 bg-gray-800 text-white rounded">Close</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        const API_BASE = 'http://127.0.0.1:5000';
+        let devices = [];
+        let alerts = [];
+        let snapshots = [];
+        let activeDeviceId = null;
+        let trackingMode = 'None';
+        let ptzActive = false;
+        let statusChartObj = null;
+
+        lucide.createIcons();
+
+        // Init Chart
+        function initChart() {
+            const ctx = document.getElementById('statusChart').getContext('2d');
+            statusChartObj = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Active', 'Inactive', 'Maintenance'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#10b981', '#ef4444', '#f59e0b'],
+                        borderWidth: 0,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    cutout: '75%',
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                }
+            });
+        }
+        initChart();
+
+        async function fetchDashboardData() {
+            try {
+                const [devRes, alertRes, snapRes] = await Promise.all([
+                    fetch(`${API_BASE}/api/devices`),
+                    fetch(`${API_BASE}/api/alerts`),
+                    fetch(`${API_BASE}/api/snapshots`)
+                ]);
+                devices = await devRes.json();
+                alerts = await alertRes.json();
+                snapshots = await snapRes.json();
+                
+                renderDashboard();
+            } catch(e) { console.error("Error fetching data", e); }
+        }
+
+        function renderDashboard() {
+            // Calculate Metrics
+            const total = devices.length;
+            const active = devices.filter(d => d.status === 'Active').length;
+            const inactive = devices.filter(d => d.status === 'Inactive').length;
+            const maint = devices.filter(d => d.status === 'Maintenance').length;
+
+            const p_act = total ? Math.round((active/total)*100) : 0;
+            const p_ina = total ? Math.round((inactive/total)*100) : 0;
+            const p_mnt = total ? Math.round((maint/total)*100) : 0;
+
+            document.getElementById('metric-total').innerText = total;
+            document.getElementById('metric-active').innerText = active;
+            document.getElementById('metric-active-pct').innerText = p_act;
+            document.getElementById('metric-active-ring').innerText = p_act + '%';
+            document.getElementById('metric-inactive').innerText = inactive;
+            document.getElementById('metric-inactive-pct').innerText = p_ina;
+            document.getElementById('metric-inactive-ring').innerText = p_ina + '%';
+            document.getElementById('metric-maint').innerText = maint;
+            document.getElementById('metric-maint-pct').innerText = p_mnt;
+            document.getElementById('metric-maint-ring').innerText = p_mnt + '%';
+
+            // Chart update
+            statusChartObj.data.datasets[0].data = [active, inactive, maint];
+            statusChartObj.update();
+            document.getElementById('chart-total').innerText = total;
+            document.getElementById('leg-active').innerText = `${active} (${p_act}%)`;
+            document.getElementById('leg-inactive').innerText = `${inactive} (${p_ina}%)`;
+            document.getElementById('leg-maint').innerText = `${maint} (${p_mnt}%)`;
+
+            // Camera Grid
+            const grid = document.getElementById('dashboard-camera-grid');
+            grid.innerHTML = '';
+            devices.forEach(dev => {
+                const isAct = dev.status === 'Active';
+                const isMnt = dev.status === 'Maintenance';
+                const color = isAct ? 'green' : (isMnt ? 'yellow' : 'red');
+                
+                const timeStr = new Date().toLocaleString('en-GB', { hour12: true, day: '2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit'});
+
+                grid.innerHTML += `
+                    <div class="glass-panel overflow-hidden flex flex-col group">
+                        <div class="h-40 relative bg-black flex items-center justify-center">
+                            <img src="${API_BASE}/video/${dev.id}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition" onerror="this.style.display='none'" />
+                            <div class="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-${color}-500/20 text-${color}-400 border border-${color}-500/30 text-[9px] font-bold tracking-wider flex items-center gap-1.5">
+                                <div class="w-1.5 h-1.5 rounded-full bg-${color}-500 ${isAct?'animate-pulse':''}"></div> ${dev.status}
+                            </div>
+                            <div class="absolute top-2 right-2 text-[9px] text-white/80 bg-black/40 px-1.5 rounded font-mono backdrop-blur">${timeStr}</div>
+                        </div>
+                        <div class="p-4 bg-dashboard-panel flex-1 flex flex-col">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h3 class="text-sm font-bold text-gray-200">${dev.id}</h3>
+                                    <p class="text-xs text-gray-400">${dev.location || 'Unknown'}</p>
+                                </div>
+                                <button class="text-gray-500 hover:text-white"><i data-lucide="more-vertical" class="w-4 h-4"></i></button>
+                            </div>
+                            <div class="flex justify-between text-[10px] text-gray-400 font-mono mb-4">
+                                <div><span class="text-gray-500">IP</span><br>${dev.ip || '-'}</div>
+                                <div><span class="text-gray-500">Type</span><br>${dev.camera_type || 'PTZ'}</div>
+                            </div>
+                            <div class="flex gap-2 mt-auto">
+                                <button class="flex-1 py-1.5 rounded bg-dashboard-bg border border-dashboard-border text-xs text-indigo-400 hover:bg-gray-800 transition flex items-center justify-center gap-1">
+                                    <i data-lucide="edit-2" class="w-3.5 h-3.5"></i> Edit
+                                </button>
+                                <button onclick="openVideoView('${dev.id}', '${dev.status}')" class="flex-1 py-1.5 rounded bg-indigo-600 border border-indigo-500 text-xs text-white hover:bg-indigo-700 transition flex items-center justify-center gap-1">
+                                    <i data-lucide="monitor-play" class="w-3.5 h-3.5"></i> View
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Alerts
+            const alertsEl = document.getElementById('alerts-container');
+            alertsEl.innerHTML = '';
+            alerts.slice(0, 5).forEach(a => {
+                const color = a.severity === 'critical' ? 'red' : (a.severity === 'warning' ? 'yellow' : 'blue');
+                const t = new Date(a.timestamp * 1000).toLocaleString('en-GB');
+                alertsEl.innerHTML += `
+                    <div class="p-3 bg-dashboard-bg rounded border border-${color}-500/20 border-l-[3px] border-l-${color}-500 flex gap-3 items-center">
+                        <i data-lucide="alert-circle" class="w-4 h-4 text-${color}-500 shrink-0"></i>
+                        <div>
+                            <div class="text-xs text-gray-300"><span class="font-bold text-white">${a.device_id}</span> ${a.message}</div>
+                            <div class="text-[9px] text-gray-500">${t}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            if(alerts.length === 0) alertsEl.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">No alerts</div>';
+            document.getElementById('notif-badge').innerText = alerts.length;
+
+            // Snapshots
+            const snapEl = document.getElementById('snapshots-container');
+            snapEl.innerHTML = '';
+            snapshots.slice(0, 4).forEach(s => {
+                const t = new Date(s.timestamp * 1000).toLocaleString('en-GB', { hour: '2-digit', minute:'2-digit' });
+                snapEl.innerHTML += `
+                    <div class="relative rounded overflow-hidden h-24 border border-dashboard-border group cursor-pointer">
+                        <img src="${API_BASE}${s.url}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                        <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+                        <div class="absolute bottom-2 left-2 right-2 flex justify-between items-end">
+                            <div>
+                                <div class="text-[10px] font-bold text-white">${s.device_id}</div>
+                                <div class="text-[8px] text-gray-400">${t}</div>
+                            </div>
+                            <i data-lucide="image" class="w-3 h-3 text-white opacity-80"></i>
+                        </div>
+                    </div>
+                `;
+            });
+            if(snapshots.length === 0) snapEl.innerHTML = '<div class="col-span-2 text-xs text-gray-500 text-center py-4">No snapshots</div>';
+
+            lucide.createIcons();
+        }
+
+        // --- Video View Toggling ---
+        function openVideoView(id, status) {
+            activeDeviceId = id;
+            document.getElementById('dashboard-view').classList.add('hidden');
+            const vv = document.getElementById('video-view');
+            vv.classList.remove('hidden');
+            vv.classList.add('flex');
+            
+            document.getElementById('active-video-title').innerText = id;
+            const statEl = document.getElementById('active-video-status');
+            statEl.innerText = status.toUpperCase();
+            
+            if(status === 'Active') {
+                statEl.className = "px-2 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase bg-green-500/20 text-green-400 border border-green-500/30";
+                document.getElementById('live-stream').src = `${API_BASE}/video/${id}?t=${Date.now()}`;
+                document.getElementById('live-stream').classList.remove('hidden');
+                document.getElementById('no-signal').classList.add('hidden');
+            } else {
+                statEl.className = "px-2 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase bg-red-500/20 text-red-400 border border-red-500/30";
+                document.getElementById('live-stream').classList.add('hidden');
+                document.getElementById('no-signal').classList.remove('hidden');
+            }
+            
+            trackingMode = 'None';
+            updateTrackingUI();
+        }
+
+        function closeVideoView() {
+            activeDeviceId = null;
+            document.getElementById('live-stream').src = "";
+            const vv = document.getElementById('video-view');
+            vv.classList.add('hidden');
+            vv.classList.remove('flex');
+            document.getElementById('dashboard-view').classList.remove('hidden');
+            fetchDashboardData();
+        }
+
+        // --- PTZ & Tracking Logic (Adapted from previous) ---
+        async function sendPTZ(action, command, speed=5) {
+            if (!activeDeviceId) return;
+            if (trackingMode !== 'None' && action === 'start') setTrackingMode('None');
+            if (action === 'stop' && !ptzActive) return;
+            ptzActive = (action === 'start');
+            try { await fetch(`${API_BASE}/ptz/${activeDeviceId}?action=${action}&code=${command}&speed=${speed}`); } catch (err) { }
+        }
+
+        async function setTrackingMode(mode) {
+            if (!activeDeviceId) return;
+            trackingMode = (trackingMode === mode) ? 'None' : mode;
+            updateTrackingUI();
+            try {
+                await fetch(`${API_BASE}/api/tracking/${activeDeviceId}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: trackingMode })
+                });
+            } catch (err) { }
+        }
+
+        function updateTrackingUI() {
+            const trackBtn = document.getElementById('track-btn');
+            const hud = document.getElementById('hud-tracking-mode');
+            if(trackingMode === 'Global') {
+                trackBtn.classList.replace('bg-gray-800', 'bg-indigo-600/30');
+                trackBtn.classList.replace('text-gray-200', 'text-indigo-300');
+                hud.innerHTML = `TRACKING: <span class="text-indigo-400 font-bold">CLICK TARGET TO LOCK</span>`;
+            } else {
+                trackBtn.classList.replace('bg-indigo-600/30', 'bg-gray-800');
+                trackBtn.classList.replace('text-indigo-300', 'text-gray-200');
+                hud.innerHTML = `TRACKING: <span class="text-gray-400">IDLE</span>`;
+            }
+        }
+
+        // Click on stream for tracking
+        document.getElementById('live-stream').addEventListener('click', async (e) => {
+            if (!activeDeviceId || trackingMode !== 'Global') return;
+            const rect = e.target.getBoundingClientRect();
+            const x = (e.clientX - rect.left) / rect.width;
+            const y = (e.clientY - rect.top) / rect.height;
+            try {
+                await fetch(`${API_BASE}/api/track_point/${activeDeviceId}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x, y })
+                });
+                document.getElementById('hud-tracking-mode').innerHTML = `TRACKING: <span class="text-green-400 font-bold">TARGET ACQUIRED</span>`;
+            } catch (err) {}
+        });
+
+        // Snapshot feature
+        async function captureSnapshot() {
+            if (!activeDeviceId) return;
+            try {
+                await fetch(`${API_BASE}/api/snapshot/${activeDeviceId}`, { method: 'POST' });
+                alert("Snapshot saved!");
+            } catch (err) {}
+        }
+
+        // Modals
+        function openCamSettingsModal() { document.getElementById('cam-settings-modal').classList.remove('hidden'); }
+        function closeCamSettingsModal() { document.getElementById('cam-settings-modal').classList.add('hidden'); }
+
+        // Polling
+        setInterval(fetchDashboardData, 3000);
+        fetchDashboardData();
+    </script>
+</body>
+</html>

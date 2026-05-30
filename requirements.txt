@@ -1,0 +1,15 @@
+Flask>=3.0.0
+flask-cors>=4.0.0
+requests>=2.31.0
+opencv-python>=4.8.0
+ultralytics>=8.1.0
+numpy
+scipy
+Pillow
+torch
+torchvision
+python-dotenv>=1.0.0
+
+# Optional: To install GPU-accelerated PyTorch for your RTX 4050, 
+# run this command manually instead of relying on the default installation:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
