@@ -125,11 +125,18 @@ def ptz_control(device_id, action, code, speed=5,
     if not c or not c.get("ip"):
         return {"error": "No camera configured"}
 
-    params = {
-        "code": code,
-        "arg1": speed, "arg2": speed,
-        "arg3": 0,     "arg4": 0,
-    }
+    if code in ("GotoPreset", "SetPreset", "ClearPreset"):
+        params = {
+            "code": code,
+            "arg1": speed, "arg2": 0,
+            "arg3": 0,     "arg4": 0,
+        }
+    else:
+        params = {
+            "code": code,
+            "arg1": speed, "arg2": speed,
+            "arg3": 0,     "arg4": 0,
+        }
     return rpc_pool.send_rpc(device_id, f"ptz.{action}", params,
                              object_id=c.get("channel", 1))
 
@@ -146,7 +153,8 @@ def get_ptz_telemetry(device_id):
 # ═══════════════════════════════════════════════════════════════════════════
 #  CAMERA STREAM
 # ═══════════════════════════════════════════════════════════════════════════
-YOLO_MODEL_PATH = "yolo11s.pt"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+YOLO_MODEL_PATH = os.path.join(BASE_DIR, "yolo11s.pt")
 
 
 class PIDController:
@@ -310,7 +318,7 @@ class CameraStream:
 
     @staticmethod
     def get_rtsp_url(c, override_subtype=None):
-        pwd = c["password"].replace("@", "%40")
+        pwd = c["password"]
         st = override_subtype if override_subtype is not None else c["subtype"]
         return (f"rtsp://{c['username']}:{pwd}@{c['ip']}:{c['rtsp_port']}"
                 f"/cam/realmonitor?channel={c['channel']}&subtype={st}")

@@ -56,7 +56,8 @@ global_state = GlobalState()
 # ═══════════════════════════════════════════════════════════════════════════
 #  DEVICE STORAGE  (thread-safe JSON file)
 # ═══════════════════════════════════════════════════════════════════════════
-DB_FILE = "devices.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "devices.json")
 _data_lock = threading.Lock()    # guards DEVICES, ALERTS, SNAPSHOTS
 
 def load_devices():
@@ -571,8 +572,9 @@ def take_snapshot(device_id):
     if not stream or stream.latest_frame is None:
         return jsonify({"error": "No stream available"}), 400
     filename = f"{device_id}_{int(time.time())}.jpg"
-    filepath = os.path.join("snapshots", filename)
-    os.makedirs("snapshots", exist_ok=True)
+    snapshot_dir = os.path.join(BASE_DIR, "snapshots")
+    filepath = os.path.join(snapshot_dir, filename)
+    os.makedirs(snapshot_dir, exist_ok=True)
     with open(filepath, "wb") as f:
         f.write(stream.latest_frame)
     snapshot_info = {
@@ -586,7 +588,8 @@ def take_snapshot(device_id):
 
 @app.route("/snapshots/<path:filename>")
 def serve_snapshot(filename):
-    return send_from_directory("snapshots", filename)
+    snapshot_dir = os.path.join(BASE_DIR, "snapshots")
+    return send_from_directory(snapshot_dir, filename)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

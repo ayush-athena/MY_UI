@@ -1,0 +1,433 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{enumitem}
+
+\definecolor{codebg}{HTML}{F5F5F5}
+\definecolor{codeframe}{HTML}{CCCCCC}
+\definecolor{xmltag}{HTML}{0000FF}
+\definecolor{xmlattr}{HTML}{7D4726}
+\definecolor{xmlval}{HTML}{008000}
+
+\lstdefinestyle{xmlstyle}{
+    basicstyle=\ttfamily\scriptsize,
+    keywordstyle=\color{xmltag}\bfseries,
+    stringstyle=\color{xmlval},
+    commentstyle=\color{gray}\itshape,
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{codeframe},
+    backgroundcolor=\color{codebg},
+    xleftmargin=1em,
+    framexleftmargin=0.5em,
+    tabsize=2
+}
+
+\lstdefinestyle{jsonstyle}{
+    basicstyle=\ttfamily\scriptsize,
+    stringstyle=\color{teal},
+    commentstyle=\color{gray},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    rulecolor=\color{codeframe},
+    backgroundcolor=\color{codebg},
+    xleftmargin=1em,
+    framexleftmargin=0.5em,
+    tabsize=2
+}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    urlcolor=blue!60!black,
+    citecolor=green!50!black
+}
+
+\title{\textbf{Camera API Evaluation \& Specification Report}\\[0.3em]
+\large ONVIF Protocol, Streaming Architecture, and API Invocation Reference}
+\author{Athena Surveillance System --- Technical Documentation}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ============================================================================
+%  1. EXECUTIVE SUMMARY
+% ============================================================================
+\section{Executive Summary}
+Modern IP camera ecosystems are governed by two fundamentally different API paradigms:
+
+\begin{enumerate}[label=\textbf{\arabic*.}]
+    \item \textbf{ONVIF (Open Network Video Interface Forum):} An industry-standard, interoperable protocol suite built on SOAP/XML web services. ONVIF defines a set of \emph{Profiles} (S, G, T, M) that guarantee baseline feature compatibility across manufacturers. Discovery uses WS-Discovery; authentication uses WS-Security with UsernameToken digest. ONVIF is vendor-neutral but incurs higher latency due to XML serialization overhead.
+
+    \item \textbf{Proprietary APIs (Dahua RPC2, Hikvision ISAPI, Axis VAPIX):} Manufacturer-specific JSON or XML-based HTTP APIs that expose deeper hardware features (smart illumination, AI analytics configuration, codec tuning) with significantly lower latency. These APIs trade interoperability for performance and feature depth.
+\end{enumerate}
+
+The Athena Surveillance System employs the \textbf{Dahua RPC2 JSON API} for PTZ control and device management, achieving the sub-100\,ms command latency required for closed-loop PID tracking. This report evaluates both the ONVIF standard and proprietary alternatives to provide a complete specification reference.
+
+
+% ============================================================================
+%  2. ONVIF PROTOCOL DEEP DIVE
+% ============================================================================
+\section{ONVIF Protocol Deep Dive}
+
+\subsection{Core Profiles}
+ONVIF defines conformance classes called \emph{Profiles}. Each profile mandates support for a specific set of services and capabilities.
+
+\begin{table}[h!]
+\centering
+\caption{ONVIF Profile Summary}
+\begin{tabularx}{\textwidth}{l l X}
+\toprule
+\textbf{Profile} & \textbf{Year} & \textbf{Governed Capabilities} \\
+\midrule
+\textbf{Profile S} & 2011 & Video streaming, PTZ control, multicast, relay outputs, Media Service v1. The foundational profile for live video. \\
+\textbf{Profile G} & 2014 & Edge storage, recording control, playback, and search on NAS/SD storage. \\
+\textbf{Profile T} & 2019 & H.265 streaming, imaging settings, motion region configuration, Media Service v2 with advanced token management. \\
+\textbf{Profile M} & 2022 & Metadata \& analytics: object classification, geolocation, face/body/vehicle metadata, and event-driven analytics. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Discovery \& Device Management}
+
+\subsubsection{WS-Discovery}
+ONVIF-compliant devices announce themselves on the local network using WS-Discovery (OASIS standard). The discovery flow is:
+\begin{enumerate}
+    \item A client sends a multicast UDP \texttt{Probe} message to \texttt{239.255.255.250:3702}.
+    \item Devices matching the requested \texttt{Type} (e.g., \texttt{dn:NetworkVideoTransmitter}) respond with a unicast \texttt{ProbeMatch} containing their \texttt{XAddrs} (service endpoint URL).
+    \item The client invokes \texttt{GetCapabilities} or \texttt{GetServices} on the returned \texttt{XAddrs} to enumerate the device's feature set.
+\end{enumerate}
+
+\begin{lstlisting}[style=xmlstyle, caption=WS-Discovery Probe Message]
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing"
+            xmlns:d="http://schemas.xmlsoap.org/ws/2005/04/discovery"
+            xmlns:dn="http://www.onvif.org/ver10/network/wsdl">
+  <s:Header>
+    <a:Action>
+      http://schemas.xmlsoap.org/ws/2005/04/discovery/Probe
+    </a:Action>
+    <a:MessageID>uuid:12345678-abcd-efgh-ijkl-123456789012</a:MessageID>
+    <a:To>urn:schemas-xmlsoap-org:ws:2005:04:discovery</a:To>
+  </s:Header>
+  <s:Body>
+    <d:Probe>
+      <d:Types>dn:NetworkVideoTransmitter</d:Types>
+    </d:Probe>
+  </s:Body>
+</s:Envelope>
+\end{lstlisting}
+
+\subsubsection{WSDL Schemas}
+All ONVIF services are defined by WSDL (Web Services Description Language) schemas. Key service WSDLs include:
+\begin{itemize}
+    \item \texttt{devicemgmt.wsdl} --- Device management (firmware, hostname, NTP, users).
+    \item \texttt{media.wsdl} / \texttt{media2.wsdl} --- Media profile and stream configuration.
+    \item \texttt{ptz.wsdl} --- Pan-Tilt-Zoom operations and presets.
+    \item \texttt{event.wsdl} --- Pull-point and basic notification subscription.
+    \item \texttt{analytics.wsdl} --- Rule and analytics module configuration.
+\end{itemize}
+
+\subsection{Media Services: v1 vs.\ v2}
+
+\subsubsection{Media Service v1 (Profile S)}
+Media Service v1 uses a \texttt{Profile} abstraction. Cameras ship with pre-configured profiles (e.g., \texttt{Profile\_1} for main stream, \texttt{Profile\_2} for sub stream). The client:
+\begin{enumerate}
+    \item Calls \texttt{GetProfiles} to retrieve available media profiles.
+    \item Passes the chosen \texttt{ProfileToken} to \texttt{GetStreamUri} to obtain the RTSP URL.
+\end{enumerate}
+Limitations: profiles are rigid; changing one encoder setting affects all consumers sharing that profile.
+
+\subsubsection{Media Service v2 (Profile T)}
+Media Service v2 decouples configuration into independent \emph{tokens}:
+\begin{itemize}
+    \item \texttt{VideoSourceConfigurationToken}
+    \item \texttt{VideoEncoderConfigurationToken} (supports H.265/HEVC natively)
+    \item \texttt{AudioSourceConfigurationToken}
+    \item \texttt{AudioEncoderConfigurationToken}
+\end{itemize}
+The client constructs a custom profile by combining tokens, enabling per-consumer encoder settings without disrupting other sessions.
+
+
+% ============================================================================
+%  3. STREAMING PROTOCOLS & MEDIA TRANSPORT
+% ============================================================================
+\section{Streaming Protocols \& Media Transport}
+
+\subsection{Protocol Comparison}
+\begin{table}[h!]
+\centering
+\caption{Streaming Protocol Comparison Matrix}
+\begin{tabularx}{\textwidth}{l c c c X}
+\toprule
+\textbf{Protocol} & \textbf{Latency} & \textbf{Transport} & \textbf{Codecs} & \textbf{Best Use Case} \\
+\midrule
+RTSP/RTP (UDP) & 100--300\,ms & UDP + RTCP & H.264/5, MJPEG & Low-latency surveillance, PTZ tracking \\
+RTSP/RTP (TCP) & 200--500\,ms & TCP interleaved & H.264/5, MJPEG & Firewall traversal, reliable delivery \\
+RTMP & 1--3\,s & TCP & H.264, AAC & Legacy CDN ingest, social streaming \\
+WebRTC & 50--200\,ms & UDP (DTLS-SRTP) & VP8/9, H.264, Opus & Browser-native, P2P, two-way comms \\
+HLS & 6--30\,s & HTTP/TCP & H.264/5, AAC & Mass distribution, CDN caching \\
+LL-HLS & 1--3\,s & HTTP/2, HTTP/3 & H.264/5, AAC & Low-latency web playback at scale \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Two-Way Audio Backchannels}
+ONVIF Profile T mandates support for audio backchannels. The implementation varies by protocol:
+\begin{itemize}
+    \item \textbf{RTSP:} The camera exposes a separate backchannel RTSP URI (e.g., \texttt{rtsp://.../ trackID=2}). The client uses the RTSP \texttt{ANNOUNCE} method to push G.711/AAC audio upstream.
+    \item \textbf{WebRTC:} Bidirectional audio is native. The \texttt{RTCPeerConnection} negotiates both send and receive tracks in the SDP offer/answer exchange.
+    \item \textbf{HLS/RTMP:} No native backchannel support; requires a parallel signaling channel (e.g., WebSocket or SIP).
+\end{itemize}
+
+
+% ============================================================================
+%  4. API METHODS & INVOCATION MECHANISMS
+% ============================================================================
+\section{API Methods \& Invocation Mechanisms}
+
+\subsection{PTZ Control}
+
+\subsubsection{ONVIF: Continuous Move (SOAP/XML)}
+Continuous movement commands drive the camera at a constant velocity until a \texttt{Stop} command is issued.
+
+\begin{lstlisting}[style=xmlstyle, caption=ONVIF ContinuousMove SOAP Request]
+<?xml version="1.0" encoding="UTF-8"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:tptz="http://www.onvif.org/ver20/ptz/wsdl"
+            xmlns:tt="http://www.onvif.org/ver10/schema">
+  <s:Header>
+    <!-- WS-Security header (see Section 5) -->
+  </s:Header>
+  <s:Body>
+    <tptz:ContinuousMove>
+      <tptz:ProfileToken>Profile_1</tptz:ProfileToken>
+      <tptz:Velocity>
+        <tt:PanTilt x="0.5" y="0.0"
+                    space="http://www.onvif.org/ver10/tptz/
+                    PanTiltSpaces/VelocityGenericSpace"/>
+        <tt:Zoom x="0.0"
+                 space="http://www.onvif.org/ver10/tptz/
+                 ZoomSpaces/VelocityGenericSpace"/>
+      </tptz:Velocity>
+      <tptz:Timeout>PT5S</tptz:Timeout>
+    </tptz:ContinuousMove>
+  </s:Body>
+</s:Envelope>
+\end{lstlisting}
+
+\subsubsection{ONVIF: Absolute Move}
+Absolute movement commands drive the camera to specific pan/tilt/zoom coordinates.
+
+\begin{lstlisting}[style=xmlstyle, caption=ONVIF AbsoluteMove SOAP Request]
+<s:Body>
+  <tptz:AbsoluteMove>
+    <tptz:ProfileToken>Profile_1</tptz:ProfileToken>
+    <tptz:Position>
+      <tt:PanTilt x="-0.5" y="0.8"
+                  space="http://www.onvif.org/ver10/tptz/
+                  PanTiltSpaces/PositionGenericSpace"/>
+      <tt:Zoom x="0.2"
+               space="http://www.onvif.org/ver10/tptz/
+               ZoomSpaces/PositionGenericSpace"/>
+    </tptz:Position>
+    <tptz:Speed>
+      <tt:PanTilt x="0.5" y="0.5"/>
+      <tt:Zoom x="0.5"/>
+    </tptz:Speed>
+  </tptz:AbsoluteMove>
+</s:Body>
+\end{lstlisting}
+
+\subsubsection{Dahua RPC2: Equivalent JSON PTZ Command}
+The proprietary Dahua RPC2 API achieves the same result with significantly less serialization overhead:
+
+\begin{lstlisting}[style=jsonstyle, caption=Dahua RPC2 PTZ Start Command]
+POST /RPC2 HTTP/1.1
+Content-Type: application/json
+
+{
+    "method": "ptz.start",
+    "params": {
+        "code": "Right",
+        "arg1": 5,
+        "arg2": 5,
+        "arg3": 0,
+        "arg4": 0
+    },
+    "object": 1,
+    "id": 388,
+    "session": "a1b2c3d4e5f6"
+}
+\end{lstlisting}
+
+\subsection{Stream URI Retrieval}
+
+\subsubsection{ONVIF Sequence}
+The full API call chain to obtain a playable RTSP stream URI:
+\begin{enumerate}
+    \item \texttt{GetServices} --- Enumerate service endpoints.
+    \item \texttt{GetProfiles} (Media v1) or \texttt{GetProfiles} (Media v2) --- List available media configurations.
+    \item \texttt{GetStreamUri} --- Request the transport-specific URI for a given profile token.
+\end{enumerate}
+
+\begin{lstlisting}[style=xmlstyle, caption=ONVIF GetStreamUri SOAP Request]
+<s:Body>
+  <trt:GetStreamUri
+      xmlns:trt="http://www.onvif.org/ver10/media/wsdl">
+    <trt:StreamSetup>
+      <tt:Stream>RTP-Unicast</tt:Stream>
+      <tt:Transport>
+        <tt:Protocol>RTSP</tt:Protocol>
+      </tt:Transport>
+    </trt:StreamSetup>
+    <trt:ProfileToken>Profile_1</trt:ProfileToken>
+  </trt:GetStreamUri>
+</s:Body>
+\end{lstlisting}
+
+\begin{lstlisting}[style=xmlstyle, caption=ONVIF GetStreamUri SOAP Response]
+<trt:GetStreamUriResponse>
+  <trt:MediaUri>
+    <tt:Uri>
+      rtsp://192.168.1.108:554/cam/realmonitor?channel=1&subtype=0
+    </tt:Uri>
+    <tt:InvalidAfterConnect>false</tt:InvalidAfterConnect>
+    <tt:InvalidAfterReboot>false</tt:InvalidAfterReboot>
+    <tt:Timeout>PT60S</tt:Timeout>
+  </trt:MediaUri>
+</trt:GetStreamUriResponse>
+\end{lstlisting}
+
+\subsubsection{Dahua RPC2: Direct RTSP URL Construction}
+In the Athena system, the RTSP URL is constructed programmatically without any API call:
+\begin{lstlisting}[style=jsonstyle, caption=Programmatic RTSP URL Construction (Python)]
+rtsp://{username}:{password}@{ip}:{rtsp_port}
+    /cam/realmonitor?channel={channel}&subtype={subtype}
+\end{lstlisting}
+This eliminates the three-step ONVIF negotiation entirely.
+
+\subsection{Analytical Event Subscriptions}
+
+\subsubsection{ONVIF: WS-BaseNotification}
+ONVIF uses the WS-BaseNotification (OASIS) standard for event delivery. Two models exist:
+\begin{itemize}
+    \item \textbf{PullPoint Subscription:} The client creates a subscription via \texttt{CreatePullPointSubscription}, then periodically calls \texttt{PullMessages} to retrieve buffered events. Suitable for firewalled environments.
+    \item \textbf{Basic Notification:} The client provides a callback URL via \texttt{Subscribe}; the camera pushes \texttt{Notify} messages to that endpoint. Lower latency but requires the client to be network-reachable.
+\end{itemize}
+
+\subsubsection{Modern Alternative: MQTT}
+Newer cameras (particularly those targeting IoT integration) support MQTT event publishing. The camera publishes detection events to a configured MQTT broker topic (e.g., \texttt{camera/cam01/events/motion}), enabling decoupled, fan-out event distribution.
+
+
+% ============================================================================
+%  5. SECURITY & AUTHENTICATION
+% ============================================================================
+\section{Security \& Authentication Mechanisms}
+
+\subsection{ONVIF: WS-Security (UsernameToken)}
+All ONVIF SOAP requests are authenticated using the WS-Security \texttt{UsernameToken} profile with password digest:
+
+\begin{lstlisting}[style=xmlstyle, caption=WS-Security UsernameToken Header]
+<s:Header>
+  <Security xmlns="http://docs.oasis-open.org/wss/2004/01/
+      oasis-200401-wss-wssecurity-secext-1.0.xsd">
+    <UsernameToken>
+      <Username>admin</Username>
+      <Password Type="...#PasswordDigest">
+        <!-- Base64(SHA1(Nonce + Created + Password)) -->
+        Gp4F2mJkd3a8s7DfT2xK...
+      </Password>
+      <Nonce EncodingType="...#Base64Binary">
+        LKqI6G/AikKCQrN0zqZFlg==
+      </Nonce>
+      <Created xmlns="http://docs.oasis-open.org/wss/2004/01/
+          oasis-200401-wss-wssecurity-utility-1.0.xsd">
+        2026-06-10T09:30:47Z
+      </Created>
+    </UsernameToken>
+  </Security>
+</s:Header>
+\end{lstlisting}
+
+The digest formula prevents replay attacks:
+\[
+\text{Digest} = \text{Base64}(\text{SHA-1}(\text{Nonce} + \text{Created} + \text{Password}))
+\]
+
+\subsection{Dahua RPC2: MD5 Challenge-Response}
+The Athena system's RPC2 authentication uses a two-phase MD5 challenge-response:
+\begin{enumerate}
+    \item Phase 1: Client sends plaintext username; server responds with \texttt{realm} and \texttt{random} nonce.
+    \item Phase 2: Client computes:
+    \[
+    h_1 = \text{MD5}(\text{user} : \text{realm} : \text{pass})
+    \]
+    \[
+    h_2 = \text{MD5}(\text{user} : \text{random} : h_1)
+    \]
+    and submits $h_2$ as the password field. The server validates and returns a persistent \texttt{session\_id}.
+\end{enumerate}
+
+\subsection{Modern RESTful APIs: JWT Bearer Tokens}
+Cloud-managed cameras (e.g., Verkada, Rhombus) use OAuth 2.0 / JWT:
+\begin{lstlisting}[style=jsonstyle, caption=JWT Authentication Flow]
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+    "username": "admin",
+    "password": "securePass123"
+}
+
+--- Response ---
+{
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "token_type": "Bearer",
+    "expires_in": 3600
+}
+
+--- Subsequent API calls ---
+GET /api/v1/cameras/cam01/stream
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+\end{lstlisting}
+
+\subsection{Security Comparison}
+\begin{table}[h!]
+\centering
+\caption{Authentication Mechanism Comparison}
+\begin{tabularx}{\textwidth}{l c c c X}
+\toprule
+\textbf{Mechanism} & \textbf{Replay Safe} & \textbf{Hash} & \textbf{Stateless} & \textbf{Notes} \\
+\midrule
+WS-Security Digest & Yes & SHA-1 & Yes & Nonce + timestamp prevent replay \\
+Dahua MD5 C-R & Partial & MD5 & No & Session-bound; no per-request nonce \\
+HTTP Digest (RFC 7616) & Yes & SHA-256 & Yes & Standard; used by Hikvision ISAPI \\
+JWT Bearer & Yes & HMAC/RSA & Yes & Cloud-native; short-lived tokens \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+% ============================================================================
+%  CONCLUSION
+% ============================================================================
+\section{Conclusion}
+This report establishes a complete technical reference for IP camera API integration. The ONVIF standard provides broad interoperability through its profile-based SOAP/XML architecture, but incurs measurable serialization and negotiation overhead. For latency-critical applications such as AI-driven PTZ tracking, proprietary JSON-over-HTTP APIs (Dahua RPC2, Hikvision ISAPI) deliver the sub-100\,ms command cycles required for closed-loop PID control. The optimal architecture---as implemented by the Athena Surveillance System---combines proprietary APIs for real-time control with ONVIF-compatible discovery and fallback to maximize both performance and device compatibility.
+
+\end{document}

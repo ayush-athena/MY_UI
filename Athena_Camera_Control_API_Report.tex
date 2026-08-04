@@ -1,0 +1,143 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+
+\lstdefinestyle{jsonstyle}{
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue},
+    stringstyle=\color{teal},
+    commentstyle=\color{gray},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{black!5}
+}
+
+\title{\textbf{Athena Surveillance System: Camera Control API Integration Report}}
+\author{Technical Documentation}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report provides an in-depth analysis of the Camera Control API utilized within the Athena Surveillance System. Moving away from standard, high-latency XML/SOAP-based ONVIF protocols, Athena implements a highly optimized, low-latency integration with the native Dahua/Hikvision \textbf{RPC2 HTTP API}. This document outlines the API's authentication protocols, heartbeat session management, PTZ action dispatching, and auxiliary configuration controls.
+\end{abstract}
+
+\section{Overview of the RPC2 Interface}
+The \texttt{RPC2} (Remote Procedure Call) interface is a JSON-based protocol exposed over standard HTTP. It allows direct manipulation of the camera's internal operating system. The API communicates over two primary endpoints:
+\begin{itemize}
+    \item \texttt{http://<ip>:<port>/RPC2\_Login}: Used strictly for session negotiation and cryptographic authentication.
+    \item \textbf{\texttt{http://<ip>:<port>/RPC2}}: The main command endpoint for authenticated sessions.
+\end{itemize}
+All requests are structured as JSON payloads containing a \texttt{method}, \texttt{params}, a request \texttt{id}, and a \texttt{session} identifier.
+
+\section{Authentication Protocol}
+Authentication is governed by the \texttt{RPCSessionPool} class, which executes a two-phase, challenge-response mechanism using MD5 hashing. This prevents plaintext credential transmission.
+
+\subsection{Phase 1: Challenge Request}
+The server initializes the login sequence by requesting a cryptographic challenge from the camera.
+\begin{lstlisting}[style=jsonstyle, language=json, caption=Phase 1 Request]
+{
+    "method": "global.login",
+    "params": {
+        "userName": "admin",
+        "password": "plaintext_password",
+        "clientType": "Web3.0"
+    },
+    "id": 1,
+    "session": 0
+}
+\end{lstlisting}
+The camera rejects the plaintext password but responds with a \texttt{realm}, a \texttt{random} challenge string, and a temporary \texttt{session} ID.
+
+\subsection{Phase 2: Cryptographic Response}
+The backend computes a nested MD5 hash using the received parameters:
+\begin{enumerate}
+    \item $h_1 = \text{MD5}(\text{username} : \text{realm} : \text{password})$
+    \item $h_2 = \text{MD5}(\text{username} : \text{random} : h_1)$
+\end{enumerate}
+
+The hashed response ($h_2$) is then submitted back to the \texttt{RPC2\_Login} endpoint:
+\begin{lstlisting}[style=jsonstyle, language=json, caption=Phase 2 Request]
+{
+    "method": "global.login",
+    "params": {
+        "userName": "admin",
+        "password": "<h2_hash_value>",
+        "clientType": "Web3.0"
+    },
+    "id": 2,
+    "session": "<temporary_session_id>"
+}
+\end{lstlisting}
+Upon success, the camera validates the hash and solidifies the \texttt{session\_id} for subsequent RPC calls.
+
+\section{Session Management \& Keep-Alive}
+To eliminate the latency of re-authenticating before every PTZ movement, the \texttt{RPCSessionPool} maintains a persistent session cache in memory. 
+
+To prevent the camera from terminating idle sessions, a background thread (\texttt{RPC-Heartbeat}) pings the \texttt{RPC2} endpoint every 30 seconds using a lightweight diagnostic method:
+\begin{lstlisting}[style=jsonstyle, language=json, caption=Heartbeat Request]
+{
+    "method": "magicBox.getDeviceType",
+    "params": null,
+    "id": 1,
+    "session": "<active_session_id>"
+}
+\end{lstlisting}
+If the heartbeat fails or the session expires, the pool automatically invalidates the cache and triggers a transparent re-authentication.
+
+\section{PTZ Action Dispatching}
+The core function of the API integration is high-speed Pan-Tilt-Zoom (PTZ) control, driven by the AI tracking engine's PID controllers.
+
+\subsection{Movement Commands}
+Movement is triggered using the \texttt{ptz.start} and \texttt{ptz.stop} methods. The \texttt{code} parameter dictates the axis (\texttt{Up}, \texttt{Down}, \texttt{Left}, \texttt{Right}), while \texttt{arg1} and \texttt{arg2} map to the calculated speed output (ranging from 1 to 8).
+
+\begin{lstlisting}[style=jsonstyle, language=json, caption=PTZ Start Command]
+{
+    "method": "ptz.start",
+    "params": {
+        "code": "Right",
+        "arg1": 5,
+        "arg2": 5,
+        "arg3": 0,
+        "arg4": 0
+    },
+    "object": 1, // Camera Channel
+    "id": 388,
+    "session": "<active_session_id>"
+}
+\end{lstlisting}
+
+When the target centers in the frame, the engine issues a \texttt{ptz.stop} command for the respective axis to halt the motors.
+
+\section{Auxiliary Controls (Lighting \& Telemetry)}
+Beyond PTZ, the RPC API accesses deeper configuration layers of the camera hardware.
+
+\subsection{Smart Illumination}
+The system can toggle the camera's physical LEDs or IR illuminators via the \texttt{configManager.setConfig} method.
+\begin{lstlisting}[style=jsonstyle, language=json, caption=Lighting Configuration]
+{
+    "method": "configManager.setConfig",
+    "params": {
+        "name": "Lighting",
+        "table": [[{"Mode": "Auto"}]]
+    },
+    "id": 389,
+    "session": "<active_session_id>"
+}
+\end{lstlisting}
+
+\subsection{Virtual Telemetry via Dead-Reckoning}
+Because native polling of PTZ absolute coordinates over HTTP is too slow for 30 FPS feedback loops, the API control layer utilizes a \textbf{Dead-Reckoning} algorithm. The backend integrates the time-delta of active \texttt{ptz.start} commands multiplied by their speed vectors to estimate the physical pan and tilt angles in real-time, completely avoiding network-bound telemetry bottlenecks.
+
+\section{Conclusion}
+The Athena Surveillance System's migration to the native Dahua RPC2 JSON API represents a crucial optimization. By implementing persistent cryptographic session pooling, lightweight heartbeat pinging, and JSON-based PTZ dispatching, the platform achieves the microsecond responsiveness strictly required for closed-loop AI-driven robotic camera tracking.
+
+\end{document}

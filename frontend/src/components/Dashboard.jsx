@@ -90,6 +90,9 @@ export default function Dashboard({ devices, alerts, snapshots, onViewCamera, on
   const [healthData, setHealthData] = React.useState(null);
   const [selectedFullViewCam, setSelectedFullViewCam] = React.useState(null);
 
+  const [showAllSnapshots, setShowAllSnapshots] = React.useState(false);
+  const [showAllAlerts, setShowAllAlerts] = React.useState(false);
+
   const [showPresets, setShowPresets] = React.useState(false);
   const [activePreset, setActivePreset] = React.useState(null);
   const [isSettingPreset, setIsSettingPreset] = React.useState(false);
@@ -712,7 +715,7 @@ export default function Dashboard({ devices, alerts, snapshots, onViewCamera, on
         <div className="glass-panel" style={{ padding: 16, display: 'flex', flexDirection: 'column', height: 260 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Alerts</span>
-            <a href="#" style={{ fontSize: 10, color: '#818cf8', textDecoration: 'none' }}>View All</a>
+            <button onClick={() => setShowAllAlerts(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#818cf8', padding: 0 }}>View All</button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
             {alerts.length === 0
@@ -736,7 +739,7 @@ export default function Dashboard({ devices, alerts, snapshots, onViewCamera, on
         <div className="glass-panel" style={{ padding: 16, display: 'flex', flexDirection: 'column', height: 260 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Snapshots / Recordings</span>
-            <a href="#" style={{ fontSize: 10, color: '#818cf8', textDecoration: 'none' }}>View All</a>
+            <button onClick={() => setShowAllSnapshots(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#818cf8', padding: 0 }}>View All</button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {snapshots.length === 0
@@ -761,7 +764,7 @@ export default function Dashboard({ devices, alerts, snapshots, onViewCamera, on
         <div className="glass-panel" style={{ padding: 16, display: 'flex', flexDirection: 'column', height: 260 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Camera Status Overview</span>
-            <a href="#" style={{ fontSize: 10, color: '#818cf8', textDecoration: 'none' }}>View All</a>
+            <button onClick={() => setActiveTab('Camera Management')} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: '#818cf8', padding: 0 }}>View All</button>
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 20 }}>
             <div style={{ width: 120, height: 120, position: 'relative', flexShrink: 0 }}>
@@ -817,6 +820,67 @@ export default function Dashboard({ devices, alerts, snapshots, onViewCamera, on
                 <button type="submit" style={{ flex: 1, padding: '10px', background: '#10b981', border: 'none', borderRadius: 8, color: '#fff', fontWeight: 600, cursor: 'pointer' }}>Save</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── All Snapshots Modal ── */}
+      {showAllSnapshots && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
+          <div className="glass-panel" style={{ width: '80%', height: '80%', padding: 24, borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#fff' }}>All Snapshots & Recordings</h3>
+              <button onClick={() => setShowAllSnapshots(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20 }}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, paddingRight: 8 }}>
+              {snapshots.length === 0 ? (
+                <div style={{ gridColumn: '1/-1', textAlign: 'center', color: C.dim, fontSize: 14, marginTop: 40 }}>No snapshots available</div>
+              ) : (
+                snapshots.map(s => (
+                  <div key={s.id} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}`, aspectRatio: '16/9' }}>
+                    <img src={`http://127.0.0.1:5000${s.url}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="snap" />
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent 50%)' }} />
+                    <div style={{ position: 'absolute', bottom: 10, left: 12, right: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#fff' }}>{s.device_id}</div>
+                        <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{new Date(s.timestamp * 1000).toLocaleString('en-GB')}</div>
+                      </div>
+                      <ImageIcon size={14} color="rgba(255,255,255,0.7)" />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── All Alerts Modal ── */}
+      {showAllAlerts && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
+          <div className="glass-panel" style={{ width: '60%', height: '70%', padding: 24, borderRadius: 16, display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#fff' }}>All Alerts</h3>
+              <button onClick={() => setShowAllAlerts(false)} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 20 }}>✕</button>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 8 }}>
+              {alerts.length === 0 ? (
+                <div style={{ textAlign: 'center', color: C.dim, fontSize: 14, marginTop: 40 }}>No alerts available</div>
+              ) : (
+                alerts.map(a => {
+                  const ac = a.severity === 'critical' ? '#ef4444' : a.severity === 'warning' ? '#f59e0b' : '#6366f1';
+                  return (
+                    <div key={a.id} style={{ padding: '16px', background: C.bg, borderRadius: 8, border: `1px solid ${ac}33`, borderLeft: `4px solid ${ac}`, display: 'flex', gap: 16, alignItems: 'center' }}>
+                      <AlertCircle size={20} color={ac} style={{ flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: 14, color: C.text }}><strong>{a.device_id}</strong> {a.message}</div>
+                        <div style={{ fontSize: 11, color: C.dim, marginTop: 4 }}>{new Date(a.timestamp * 1000).toLocaleString('en-GB')}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}

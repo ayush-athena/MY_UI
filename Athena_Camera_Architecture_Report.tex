@@ -1,0 +1,98 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+
+\title{\textbf{Athena Surveillance System: Camera Control Architecture and Codebase Analysis}}
+\author{Technical Documentation}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report provides a comprehensive technical breakdown of the Athena Surveillance System's camera control mechanisms, focusing on the Remote Procedure Call (RPC) based Pan-Tilt-Zoom (PTZ) integration often colloquially referred to as ONVIF control. It thoroughly decodes the legacy monolithic \texttt{Cam.py} server, detailing its role as the primary routing layer, and examines the advanced dependent Python scripts that comprise the system's modular architecture: \texttt{streams.py}, \texttt{rpc\_pool.py}, and the ReID engine.
+\end{abstract}
+
+\section{Technology Stack}
+The system leverages a robust, hardware-accelerated technology stack designed for real-time video processing and tracking:
+\begin{itemize}
+    \item \textbf{Core Language}: Python 3.10+
+    \item \textbf{Web Framework}: Flask and Flask-CORS for REST APIs and Server-Sent Events (SSE).
+    \item \textbf{Computer Vision}: OpenCV for RTSP stream decoding, with FFmpeg bindings supporting \texttt{hwaccel;cuda} for GPU acceleration.
+    \item \textbf{AI/Deep Learning}: Ultralytics YOLOv11 for person detection; PyTorch (CUDA enabled) for running both detection and Re-Identification (ReID) models.
+    \item \textbf{Tracking}: ByteTrack for temporal tracking across frames.
+    \item \textbf{Communication}: \texttt{requests} library for HTTP-based RPC2 commands simulating ONVIF profile S/T features.
+\end{itemize}
+
+\section{Camera Control Mechanism (RPC / ONVIF)}
+While standard ONVIF protocol relies on SOAP/XML, this implementation interfaces directly with the native Dahua/Hikvision RPC2 HTTP API. This approach reduces latency and enables fine-grained PTZ and telemetry control necessary for real-time AI tracking.
+
+\subsection{Session Management (\texttt{rpc\_pool.py})}
+The \texttt{RPCSessionPool} class manages authentication and keep-alive procedures:
+\begin{itemize}
+    \item \textbf{Two-Phase Authentication}: It uses an MD5 challenge-response mechanism. Phase 1 requests a random challenge string, and Phase 2 computes a nested MD5 hash (\texttt{MD5(Username : RandomStr : MD5(Username : Realm : Password))}).
+    \item \textbf{Connection Pooling}: Sessions are cached per \texttt{device\_id}. A background \texttt{RPC-Heartbeat} thread pings each active camera every 30 seconds using a lightweight \texttt{magicBox.getDeviceType} call. If a session goes stale, it transparently re-authenticates.
+\end{itemize}
+
+\subsection{PTZ Control Execution}
+The \texttt{ptz\_control} function translates logical tracking commands into camera-specific RPC instructions.
+\begin{itemize}
+    \item \textbf{Dead-Reckoning Telemetry}: Because native PTZ telemetry is slow to poll, \texttt{PTZStateManager} integrates the velocity of the camera over time. When an \texttt{Up/Down/Left/Right} command is sent at a specific speed, the engine calculates the estimated pan and tilt angles in real-time.
+    \item \textbf{Action Dispatching}: Commands are routed via \texttt{send\_rpc} with \texttt{ptz.start} and \texttt{ptz.stop} methods, adjusting parameters like \texttt{arg1} and \texttt{arg2} mapped to the PID controller's velocity outputs.
+\end{itemize}
+
+\section{Decoding \texttt{Cam.py}}
+\texttt{Cam.py} serves as the legacy monolithic gateway (now being modularized into \texttt{main.py} in Project\_X). It wires together the tracking logic, HTTP routes, and shared state.
+\subsection{Singleton Initialization}
+The file initializes global singletons crucial for system operation:
+\begin{itemize}
+    \item \textbf{\texttt{BatchReIDEngine}}: GPU-accelerated Re-Identification model instance.
+    \item \textbf{\texttt{GlobalState}}: A shared state manager tracking a single authoritative subject across all connected cameras.
+    \item \textbf{\texttt{RPCSessionPool}}: The RPC manager handling camera authentication.
+\end{itemize}
+
+\subsection{Thread-Safe Resource Management}
+Due to the multithreaded nature of RTSP streams and Flask, \texttt{Cam.py} employs a \texttt{threading.Lock()} (\texttt{\_data\_lock}) to protect access to the \texttt{DEVICES}, \texttt{ALERTS}, and \texttt{SNAPSHOTS} dictionaries, which serve as an in-memory database backed by \texttt{devices.json}.
+
+\subsection{API Routes and Business Logic}
+\begin{itemize}
+    \item \textbf{Stream Provisioning (\texttt{/video/<device\_id>})}: Yields a multipart MJPEG stream from the respective \texttt{CameraStream} instance.
+    \item \textbf{Tracking Controls (\texttt{/api/tracking/...})}: Allows switching between \texttt{Manual}, \texttt{Auto}, and \texttt{Global} tracking modes. \texttt{/api/track\_point} processes coordinate clicks to initiate a lock-on handshake via the ReID engine.
+    \item \textbf{Calibration (\texttt{\_calibration\_worker})}: A background worker that automatically measures the time taken to traverse the maximum Pan and Tilt axes, enabling the dead-reckoning engine to calculate speed constants.
+\end{itemize}
+
+\section{Dependent Python Scripts Analysis}
+The heavy lifting is distributed among modular backend scripts.
+
+\subsection{\texttt{streams.py} (Camera Pipeline)}
+This file implements the core inference and control loop. Each camera spawns a \texttt{CameraStream} class that runs three daemon threads:
+\begin{enumerate}
+    \item \textbf{\texttt{\_capture\_worker}}: Reads RTSP frames via \texttt{cv2.VideoCapture} (with \texttt{CAP\_FFMPEG} and \texttt{hwaccel;cuda} support). It calculates real-time FPS and blur metrics.
+    \item \textbf{\texttt{\_track\_worker}}: The brain of the stream. It runs YOLOv11 to detect persons, feeds the bounding boxes to ByteTrack for temporal ID assignment, and crops the detections to send to the \texttt{BatchReIDEngine}. It implements a sophisticated 4-phase tracking state machine (Pending Click, Parallel Tracking, Global Sync, Auto).
+    \item \textbf{\texttt{\_ptz\_worker}}: Dispatches PTZ commands from a thread-safe \texttt{Queue(maxsize=2)}, intentionally dropping stale commands under backpressure to prevent "PTZ lag".
+\end{enumerate}
+
+\subsubsection{Discrete PID Controller}
+A significant feature of \texttt{streams.py} is the \texttt{PIDController} class. It translates bounding box pixel coordinates (error) into smooth Pan/Tilt speeds.
+\begin{itemize}
+    \item \textbf{P (Proportional)}: Responds to how far the subject is from the center of the frame.
+    \item \textbf{I (Integral)}: Accumulates error to overcome camera motor friction (features anti-windup clamping).
+    \item \textbf{D (Derivative)}: Applies breaking force when the subject moves back towards the center, eliminating camera oscillation/hunting.
+\end{itemize}
+
+\subsection{\texttt{rpc\_pool.py} (Dahua RPC API Integration)}
+Manages the camera connection pool. The custom Dahua RPC API effectively replaces standard ONVIF protocol to ensure minimum latency. The script features an asynchronous heartbeat system to prevent connection timeouts mid-stream.
+
+\subsection{\texttt{reid\_engine.py} (Re-Identification)}
+The engine processes cropped frames and extracts embeddings. It exposes \texttt{extract\_sync} for immediate lock-on (e.g., user click) and \texttt{submit\_async} for parallel cache population, allowing \texttt{streams.py} to match subjects using Cosine Similarity metrics against the \texttt{GlobalState} target embedding.
+
+\section{Conclusion}
+The Athena Surveillance System exhibits a highly advanced edge-computing architecture. By migrating from standard XML-based ONVIF to direct RPC2 API calls, the system achieves the sub-100ms latency required for active PID tracking. The monolithic \texttt{Cam.py} successfully orchestrates hardware-accelerated streams, while \texttt{streams.py} isolates the complex YOLO inference, ReID extraction, and robotic camera movement into isolated thread pools, ensuring maximum performance and stability.
+
+\end{document}

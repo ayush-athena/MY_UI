@@ -322,7 +322,7 @@
                         <button onmousedown="sendPTZ('start', 'Up')" onmouseup="sendPTZ('stop', 'Up')" onmouseleave="sendPTZ('stop', 'Up')" class="ptz-btn-mini w-8 h-8"><i data-lucide="chevron-up" class="w-4 h-4"></i></button>
                         <div></div>
                         <button onmousedown="sendPTZ('start', 'Left')" onmouseup="sendPTZ('stop', 'Left')" onmouseleave="sendPTZ('stop', 'Left')" class="ptz-btn-mini w-8 h-8"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
-                        <button onclick="sendPTZ('start', 'GotoPreset', 1)" class="ptz-btn-mini w-8 h-8 bg-gray-800"><i data-lucide="crosshair" class="w-3.5 h-3.5 text-indigo-400"></i></button>
+                        <button onclick="sendPTZ('start', 'GotoPreset', 1)" title="Home" class="ptz-btn-mini w-8 h-8 bg-gray-800"><i data-lucide="home" class="w-3.5 h-3.5 text-indigo-400"></i></button>
                         <button onmousedown="sendPTZ('start', 'Right')" onmouseup="sendPTZ('stop', 'Right')" onmouseleave="sendPTZ('stop', 'Right')" class="ptz-btn-mini w-8 h-8"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
                         <div></div>
                         <button onmousedown="sendPTZ('start', 'Down')" onmouseup="sendPTZ('stop', 'Down')" onmouseleave="sendPTZ('stop', 'Down')" class="ptz-btn-mini w-8 h-8"><i data-lucide="chevron-down" class="w-4 h-4"></i></button>
@@ -338,6 +338,22 @@
                         <div class="flex gap-1">
                             <button onmousedown="sendPTZ('start', 'FocusNear')" onmouseup="sendPTZ('stop', 'FocusNear')" onmouseleave="sendPTZ('stop', 'FocusNear')" class="ptz-btn-mini px-2 py-1 text-[10px]"><i data-lucide="focus" class="w-3 h-3 mr-1"></i> Near</button>
                             <button onmousedown="sendPTZ('start', 'FocusFar')" onmouseup="sendPTZ('stop', 'FocusFar')" onmouseleave="sendPTZ('stop', 'FocusFar')" class="ptz-btn-mini px-2 py-1 text-[10px]"><i data-lucide="scan" class="w-3 h-3 mr-1"></i> Far</button>
+                        </div>
+                    </div>
+                    <div class="w-px bg-gray-700/50"></div>
+                    <!-- Presets -->
+                    <div class="flex flex-col justify-center gap-2">
+                        <div class="text-[10px] text-gray-400 font-bold flex justify-between items-center px-1">
+                            PRESETS
+                            <button id="preset-mode-btn" onclick="togglePresetMode()" class="text-indigo-400 hover:text-indigo-300 ml-4 px-1 rounded transition">GOTO</button>
+                        </div>
+                        <div class="grid grid-cols-3 gap-1">
+                            <button onclick="handlePreset(1)" class="ptz-btn-mini px-2 py-1 text-[10px] font-mono">1</button>
+                            <button onclick="handlePreset(2)" class="ptz-btn-mini px-2 py-1 text-[10px] font-mono">2</button>
+                            <button onclick="handlePreset(3)" class="ptz-btn-mini px-2 py-1 text-[10px] font-mono">3</button>
+                            <button onclick="handlePreset(4)" class="ptz-btn-mini px-2 py-1 text-[10px] font-mono">4</button>
+                            <button onclick="handlePreset(5)" class="ptz-btn-mini px-2 py-1 text-[10px] font-mono">5</button>
+                            <button onclick="handlePreset(6)" class="ptz-btn-mini px-2 py-1 text-[10px] font-mono">6</button>
                         </div>
                     </div>
                 </div>
@@ -456,7 +472,7 @@
                 grid.innerHTML += `
                     <div class="glass-panel overflow-hidden flex flex-col group">
                         <div class="h-40 relative bg-black flex items-center justify-center">
-                            <img src="${API_BASE}/video/${dev.id}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition" onerror="this.style.display='none'" />
+                            <img src="${API_BASE}/api/cameras/${dev.id}/stream?preview=1" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition" onerror="this.style.display='none'" />
                             <div class="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-${color}-500/20 text-${color}-400 border border-${color}-500/30 text-[9px] font-bold tracking-wider flex items-center gap-1.5">
                                 <div class="w-1.5 h-1.5 rounded-full bg-${color}-500 ${isAct?'animate-pulse':''}"></div> ${dev.status}
                             </div>
@@ -544,7 +560,7 @@
             
             if(status === 'Active') {
                 statEl.className = "px-2 py-0.5 rounded text-[9px] font-bold tracking-widest uppercase bg-green-500/20 text-green-400 border border-green-500/30";
-                document.getElementById('live-stream').src = `${API_BASE}/video/${id}?t=${Date.now()}`;
+                document.getElementById('live-stream').src = `${API_BASE}/api/cameras/${id}/stream?t=${Date.now()}`;
                 document.getElementById('live-stream').classList.remove('hidden');
                 document.getElementById('no-signal').classList.add('hidden');
             } else {
@@ -599,6 +615,34 @@
                 trackBtn.classList.replace('bg-indigo-600/30', 'bg-gray-800');
                 trackBtn.classList.replace('text-indigo-300', 'text-gray-200');
                 hud.innerHTML = `TRACKING: <span class="text-gray-400">IDLE</span>`;
+            }
+        }
+
+        // Preset state
+        let isSettingPreset = false;
+        function togglePresetMode() {
+            isSettingPreset = !isSettingPreset;
+            const btn = document.getElementById('preset-mode-btn');
+            if(isSettingPreset) {
+                btn.innerText = 'SET';
+                btn.classList.replace('text-indigo-400', 'text-red-400');
+                btn.classList.replace('hover:text-indigo-300', 'hover:text-red-300');
+                btn.classList.add('bg-red-500/10');
+            } else {
+                btn.innerText = 'GOTO';
+                btn.classList.replace('text-red-400', 'text-indigo-400');
+                btn.classList.replace('hover:text-red-300', 'hover:text-indigo-300');
+                btn.classList.remove('bg-red-500/10');
+            }
+        }
+
+        function handlePreset(n) {
+            if(isSettingPreset) {
+                sendPTZ('start', 'SetPreset', n);
+                // Auto-toggle back to GoTo to prevent accidental overwrites
+                setTimeout(togglePresetMode, 300);
+            } else {
+                sendPTZ('start', 'GotoPreset', n);
             }
         }
 
